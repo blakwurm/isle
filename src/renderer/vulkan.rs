@@ -17,8 +17,14 @@ mod vs {
 
     layout(location = 0) out vec4 out_color;
 
+    layout(set = 0, binding = 0) uniform MVP {
+      mat4 model;
+      mat4 view;
+      mat4 proj;
+    } mvp;
+
     void main() {
-      gl_Position = vec4(position, 1.0);
+      gl_Position = mvp.proj * mvp.view * mvp.model * vec4(position, 1.0);
       out_color = color;
     }
     "
