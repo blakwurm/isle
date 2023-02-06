@@ -1,30 +1,52 @@
-use std::{any::{Any, TypeId}, collections::{HashSet, HashMap}, hash::Hash};
+use std::{any::{Any, TypeId}, collections::{HashSet, HashMap}, hash::Hash, sync::Arc};
 
 use super::Registry;
 
 pub trait Component: Eq + Hash {}
 
 pub struct EntityRegistry {
-  component_registrations: Registry<String>,
-  components: HashMap<(String, TypeId), Box<dyn Any>>,
+  component_registrations: HashMap<TypeId, HashSet<String>>,
+  components: HashMap<(String, TypeId), Arc<dyn Any>>,
 }
 
 impl EntityRegistry {
   pub fn new() -> Self {
     Self {
-      component_registrations: Registry::new(),
+      component_registrations: HashMap::new(),
       components: HashMap::new(),
     }
   }
 
-  pub fn add_component<T>(&mut self, entity: &str, component: T) where T: Component + 'static {
-    self.components.insert((String::from(entity), TypeId::of::<T>()), Box::new(component));
-    self.component_registrations.register::<T>(Box::new(String::from(entity)));
+  pub fn add_component<T: Component + 'static>(&mut self, entity: &str, component: T) {
+    let set = self.component_registrations.entry(TypeId::of::<T>()).or_insert(HashSet::new());
+    set.insert(String::from(entity));
+
+    self.components.insert((String::from(entity), TypeId::of::<T>()), Arc::new(component));
   }
 
-  pub fn get_entities_by_component<T>(&self) -> Option<Vec<Box<T>>> where T: Component + 'static {
-    let set = self.component_registrations.get::<T>()?;
+  pub fn get_entities_by_component<T: Component + 'static>(&self) -> Option<Vec<Arc<T>>> {
+    let set = self.component_registrations.get(&TypeId::of::<T>())?;
+    let vec: Vec<Arc<T>> = set.iter().map(|entity| {
+      let component = self.components.get(&(entity.clone(), TypeId::of::<T>())).unwrap();
+      component.downcast_ref::<Arc<T>>().unwrap().clone()
+    }).collect();
 
-    Some(set.iter().map(|id| *self.components.get(&(String::from(*id.clone()), TypeId::of::<T>())).unwrap().downcast::<Box<T>>().unwrap()).collect())
+    Some(vec)
+  }
+
+  pub fn get_entities_by_components<T>(&self, types: Vec<T>) -> Option<Vec<HashMap<TypeId, Arc<dyn Any>>>>  where T: Any + 'static {
+    let mut set: HashSet<String> = HashSet::new();
+    for type_id in &types {
+      let type_id = TypeId::of::<T>();
+      set = &set & self.component_registrations.get(&type_id)?;
+    }
+
+    Some(set.into_iter().map(|entity| {
+      types.iter().map(|type_id| {
+        let type_id = TypeId::of::<T>();
+        let component = self.components.get(&(entity.clone(), type_id)).unwrap();
+        (type_id, component.clone())
+      }).collect()
+    }).collect())
   }
 }
