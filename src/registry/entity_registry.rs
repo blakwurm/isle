@@ -2,8 +2,6 @@ use std::{any::{Any, TypeId}, collections::{HashSet, HashMap}, hash::Hash, sync:
 
 use super::Registry;
 
-pub trait Component: Eq + Hash {}
-
 pub struct EntityRegistry {
   component_registrations: HashMap<TypeId, HashSet<String>>,
   components: HashMap<(String, TypeId), Arc<dyn Any>>,
@@ -17,14 +15,14 @@ impl EntityRegistry {
     }
   }
 
-  pub fn add_component<T: Component + 'static>(&mut self, entity: &str, component: T) {
+  pub fn add_component<T: Eq + Hash + 'static>(&mut self, entity: &str, component: T) {
     let set = self.component_registrations.entry(TypeId::of::<T>()).or_insert(HashSet::new());
     set.insert(String::from(entity));
 
     self.components.insert((String::from(entity), TypeId::of::<T>()), Arc::new(component));
   }
 
-  pub fn get_entities_by_component<T: Component + 'static>(&self) -> Option<Vec<Arc<T>>> {
+  pub fn get_entities_by_component<T: Eq + Hash + 'static>(&self) -> Option<Vec<Arc<T>>> {
     let set = self.component_registrations.get(&TypeId::of::<T>())?;
     let vec: Vec<Arc<T>> = set.iter().map(|entity| {
       let component = self.components.get(&(entity.clone(), TypeId::of::<T>())).unwrap();
@@ -48,5 +46,30 @@ impl EntityRegistry {
         (type_id, component.clone())
       }).collect()
     }).collect())
+  }
+}
+
+#[cfg(test)]
+mod test_entity_registry {
+  use super::*;
+
+  #[derive(Eq, Hash, PartialEq)]
+  struct TestComponentOne { data: String, }
+
+  #[derive(Eq, Hash, PartialEq)]
+  struct TestComponentTwo { }
+
+  #[derive(Eq, Hash, PartialEq)]
+  struct TestComponentThree { }
+
+  #[test]
+  fn test_add_component() {
+    let mut registry = EntityRegistry::new();
+    
+    registry.add_component("test_entity", TestComponentOne{ data: "test".to_string() });
+
+    let data = registry.get_entities_by_component::<TestComponentOne>().unwrap()[0].data.clone();
+
+    assert_eq!(data, "test".to_string());
   }
 }
