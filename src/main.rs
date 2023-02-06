@@ -1,4 +1,5 @@
 mod renderer;
+mod registry;
 
 use renderer::vulkan::{VulkanBackend, Vertex};
 fn main() {

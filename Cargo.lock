@@ -627,6 +627,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "image",
+ "lazy_static",
  "rand",
  "vulkano",
  "vulkano-shaders",
