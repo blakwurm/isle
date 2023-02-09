@@ -4,6 +4,13 @@ use std::{
   hash::Hash,
 };
 
+#[macro_export]
+macro_rules! filter {
+  ($($t:ty),*) => {
+    vec![$(std::any::TypeId::of::<$t>()),*]
+  }
+}
+
 #[derive(Default)]
 pub struct EntityRegistry {
   entities: HashMap<(String, TypeId), Box<dyn Any>>,
@@ -159,7 +166,7 @@ mod entity_registry_tests {
     registry.add_component(String::from("test_entity_4"), 6_i64);
 
     let entities = registry
-      .get_entities_by_components(vec![TypeId::of::<i32>(), TypeId::of::<i64>()])
+      .get_entities_by_components(filter![i32, i64])
       .unwrap();
     assert!(entities.contains(&String::from("test_entity_1")));
     assert!(entities.contains(&String::from("test_entity_2")));
