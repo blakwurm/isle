@@ -3,6 +3,7 @@ use std::{collections::HashMap, any::{TypeId, Any}};
 
 type EventCallback<'a, T> = Box<dyn FnMut(&T) + Send + Sync + 'a>;
 
+#[derive(Default)]
 struct EventRegistry<'a> {
   registry: HashMap<TypeId, Vec<Box<dyn FnMut(&dyn Any) + Send + Sync + 'a>>>,
 }
@@ -10,7 +11,7 @@ struct EventRegistry<'a> {
 impl<'a> EventRegistry<'a> {
   pub fn new() -> Self {
     Self {
-      registry: HashMap::new()
+      ..Default::default()
     }
   }
 
@@ -41,24 +42,27 @@ impl<'a> EventRegistry<'a> {
 
 #[cfg(test)]
 mod event_registry_tests {
+use std::sync::{Arc, Mutex};
+
 use super::*;
 
-  struct MyEvent {
-    panic: bool,
-  }
+  struct MyEvent {}
 
   #[test]
-  #[should_panic(expected = "event succesfully triggered")]
   fn test_event_registry() {
     let mut registry = EventRegistry::new();
+
+    let counter: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
+    let c_ref = counter.clone();
     
-    registry.subscribe(|event: &MyEvent| {
-      if event.panic {
-        panic!("event succesfully triggered");
-      }
+    registry.subscribe(move |_: &MyEvent| {
+      let mut v = c_ref.lock().unwrap();
+      *v += 1;
     });
 
-    registry.invoke(&MyEvent { panic: false });
-    registry.invoke(&MyEvent { panic: true });
+    registry.invoke(&MyEvent {});
+    registry.invoke(&MyEvent {});
+
+    assert_eq!(2, *counter.lock().unwrap());
   }
 }
