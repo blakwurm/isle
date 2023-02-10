@@ -6,7 +6,7 @@ use std::{
 
 #[macro_export]
 macro_rules! filter {
-  ($($t:ty),*) => {
+  [$($t:ty),*] => {
     vec![$(std::any::TypeId::of::<$t>()),*]
   }
 }
@@ -69,28 +69,10 @@ impl EntityRegistry {
   }
 }
 
-pub struct EntityProxy<'a>(String, &'a EntityRegistry);
-
-impl EntityProxy<'_> {
-  pub fn get_component<T: 'static>(&self) -> Option<&T> {
-    self.1.get_component(&self.0)
-  }
-}
-
-pub struct EntityProxyMut<'a>(String, &'a mut EntityRegistry);
-
-impl EntityProxyMut<'_> {
-  pub fn get_component<T: 'static>(&self) -> Option<&T> {
-    self.1.get_component(&self.0)
-  }
-
-  pub fn get_component_mut<T: 'static>(&mut self) -> Option<&mut T> {
-    self.1.get_component_mut(&self.0)
-  }
-}
-
 mod entity_registry_tests {
-  use super::*;
+  use crate::ecs::EntityProxy;
+
+use super::*;
 
   #[test]
   fn test_component_add() {
@@ -125,7 +107,7 @@ mod entity_registry_tests {
       Some(&2_i64)
     );
 
-    let mut entity = EntityProxyMut(String::from("test_entity"), &mut registry);
+    let mut entity = EntityProxy(String::from("test_entity"), &mut registry);
 
     assert_eq!(entity.get_component::<i32>(), Some(&1));
     assert_eq!(entity.get_component::<i64>(), Some(&2_i64));

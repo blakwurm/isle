@@ -1,5 +1,6 @@
 mod registry;
 mod renderer;
+mod ecs;
 
 use renderer::vulkan::{Vertex, VulkanBackend};
 fn main() {
