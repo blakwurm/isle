@@ -10,7 +10,10 @@ use vulkano::{
   },
   device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo},
   image::{view::ImageView, ImageUsage, SwapchainImage},
-  instance::{Instance, InstanceCreateInfo},
+  instance::{
+    debug::{DebugUtilsMessenger, DebugUtilsMessengerCreateInfo},
+    Instance, InstanceCreateInfo,
+  },
   pipeline::{
     graphics::{
       input_assembly::InputAssemblyState,
@@ -46,14 +49,15 @@ mod vs {
 
     layout(location = 0) out vec4 out_color;
 
-    layout(set = 0, binding = 0) uniform MVP {
-      mat4 model;
-      mat4 view;
-      mat4 proj;
-    } mvp;
+    // layout(set = 0, binding = 0) uniform MVP {
+    //   mat4 model;
+    //   mat4 view;
+    //   mat4 proj;
+    // } mvp;
 
     void main() {
-      gl_Position = mvp.proj * mvp.view * mvp.model * vec4(position, 1.0);
+      // gl_Position = mvp.proj * mvp.view * mvp.model * vec4(position, 1.0);
+      gl_Position = vec4(position, 1.0);
       out_color = color;
     }
     "
@@ -94,6 +98,7 @@ struct Actor {
 }
 
 pub struct VulkanBackend {
+  _debug: Option<DebugUtilsMessenger>,
   surface: Arc<Surface<Window>>,
   device: Arc<Device>,
   queue: Arc<Queue>,
@@ -135,9 +140,20 @@ impl VulkanBackend {
       library,
       InstanceCreateInfo {
         enabled_extensions: required_extensions,
+        enabled_layers: vec!["VK_LAYER_KHRONOS_validation".to_string()],
         ..Default::default()
       },
     )?;
+
+    let _debug = unsafe {
+      DebugUtilsMessenger::new(
+        instance.clone(),
+        DebugUtilsMessengerCreateInfo::user_callback(Arc::new(|msg| {
+          println!("Vulkan: {:?}", msg.description);
+        })),
+      )
+      .ok()
+    };
 
     let physical = match instance.enumerate_physical_devices()?.next() {
       Some(physical) => physical,
@@ -228,6 +244,7 @@ impl VulkanBackend {
     let frames_in_flight = swapchain_images.len();
 
     Ok(Self {
+      _debug,
       surface,
       device,
       queue,
