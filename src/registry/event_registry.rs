@@ -29,8 +29,11 @@ where
     self.subscribe_with_filter(callback, None)
   }
 
-  pub fn subscribe_with_filter<T>(&mut self, callback: impl FnMut(&T) + Send + Sync + 'a, filter: Option<F>)
-  where
+  pub fn subscribe_with_filter<T>(
+    &mut self,
+    callback: impl FnMut(&T) + Send + Sync + 'a,
+    filter: Option<F>,
+  ) where
     T: 'a + Any + Send + Sync,
   {
     let type_id = TypeId::of::<T>();
@@ -59,7 +62,7 @@ where
     }
   }
 
-  pub fn get_subscriptions<T> (&self) -> Option<&Vec<EventSubscriptionArgs<'a, F>>>
+  pub fn get_subscriptions<T>(&self) -> Option<&Vec<EventSubscriptionArgs<'a, F>>>
   where
     T: 'a + Any + Send + Sync,
   {
@@ -75,7 +78,7 @@ mod event_registry_tests {
 
   use crate::filter;
 
-use super::*;
+  use super::*;
 
   struct MyEvent {}
 
@@ -98,9 +101,9 @@ use super::*;
   }
 
   fn test_filter_registry() {
-    let mut registry:EventRegistry<Vec<TypeId>> = EventRegistry::new();
+    let mut registry: EventRegistry<Vec<TypeId>> = EventRegistry::new();
 
-    registry.subscribe_with_filter::<i32> (|_|{}, Some(filter![i32, i64]));
+    registry.subscribe_with_filter::<i32>(|_| {}, Some(filter![i32, i64]));
     let subscriptions = registry.get_subscriptions::<i32>().unwrap();
     assert_eq!(subscriptions.len(), 1);
 

@@ -7,9 +7,7 @@ pub struct ECS<'a> {
   events: EventRegistry<'a, Vec<TypeId>>,
 }
 
-impl ECS<'_> {
-
-}
+impl ECS<'_> {}
 
 pub struct TickEvent<'a> {
   delta: f32,

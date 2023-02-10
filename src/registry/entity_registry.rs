@@ -72,7 +72,7 @@ impl EntityRegistry {
 mod entity_registry_tests {
   use crate::ecs::EntityProxy;
 
-use super::*;
+  use super::*;
 
   #[test]
   fn test_component_add() {
