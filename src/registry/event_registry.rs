@@ -100,6 +100,7 @@ mod event_registry_tests {
     assert_eq!(2, *counter.lock().unwrap());
   }
 
+  #[test]
   fn test_filter_registry() {
     let mut registry: EventRegistry<Vec<TypeId>> = EventRegistry::new();
 
