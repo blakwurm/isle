@@ -1,0 +1,14 @@
+[package]
+name = "isle_macros"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+path = "src/lib.rs"
+
+
+[dependencies]
+isle_traits = { path = "../traits" }
+syn = "0.15.44"
+quote = "0.6.13"

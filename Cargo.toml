@@ -3,9 +3,9 @@ name = "isle"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+isle_traits = { path = "./traits" }
+isle_macros = { path = "./macros" }
 bytemuck = "1.13.0"
 image = "0.24"
 lazy_static = "1.4.0"

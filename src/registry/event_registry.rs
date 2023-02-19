@@ -1,74 +1,57 @@
-use std::{
-  any::{Any, TypeId},
-  collections::HashMap,
-};
+use std::{collections::HashMap, any::{TypeId, Any}};
+use isle_traits::event::Event;
 
-type EventCallback<'a, T> = Box<dyn FnMut(&T) + Send + Sync + 'a>;
-
-struct EventSubscriptionArgs<'a, F>(Box<dyn FnMut(&dyn Any) + Send + Sync + 'a>, Option<F>);
-
-#[derive(Default)]
-pub struct EventRegistry<'a, F> {
-  registry: HashMap<TypeId, Vec<EventSubscriptionArgs<'a, F>>>,
+pub struct EventSubscriptionArgs(Box<dyn FnMut(&dyn Event)>, Option<Vec<TypeId>>);
+struct EventRegistry {
+  subscribers: HashMap<TypeId, Vec<EventSubscriptionArgs>>,
 }
 
-impl<'a, F> EventRegistry<'a, F>
-where
-  F: Default,
-{
-  pub fn new() -> Self {
+impl EventRegistry {
+  fn new() -> Self {
     Self {
-      ..Default::default()
+      subscribers: HashMap::new(),
     }
   }
 
-  pub fn subscribe<T>(&mut self, callback: impl FnMut(&T) + Send + Sync + 'a)
+  fn subscribe<E>(&mut self, mut callback: impl FnMut(&E) + 'static)
   where
-    T: 'a + Any + Send + Sync,
+    E: Event + 'static,
   {
-    self.subscribe_with_filter(callback, None)
+    self.subscribe_with_filter(callback, None);
   }
 
-  pub fn subscribe_with_filter<T>(
-    &mut self,
-    callback: impl FnMut(&T) + Send + Sync + 'a,
-    filter: Option<F>,
-  ) where
-    T: 'a + Any + Send + Sync,
+  fn subscribe_with_filter<E>(&mut self, mut callback: impl FnMut(&E) + 'static, filter: Option<Vec<TypeId>>)
+  where
+  E: Event + 'static
   {
-    let type_id = TypeId::of::<T>();
+    let subscribers = self
+      .subscribers
+      .entry(TypeId::of::<E>())
+      .or_insert_with(Vec::new);
 
-    let mut boxed_callback = Box::new(callback) as EventCallback<'a, T>;
-    let callback = Box::new(move |data: &dyn Any| {
-      if let Some(data) = data.downcast_ref::<T>() {
-        boxed_callback(data);
+    let boxed_callback = Box::new(move |event: &dyn Event| {
+      if let Some(event) = event.as_any().downcast_ref::<E>() {
+        callback(event);
       }
-    }) as Box<dyn FnMut(&dyn Any) + Send + Sync + 'a>;
+    });
 
-    let callbacks = self.registry.entry(type_id).or_insert(Vec::new());
-    callbacks.push(EventSubscriptionArgs(callback, filter));
+    subscribers.push(EventSubscriptionArgs(boxed_callback, filter));
   }
 
-  pub fn invoke<T>(&mut self, event: &T)
+  fn invoke<E: 'static>(&mut self, event: E)
   where
-    T: 'a + Any + Send + Sync,
+    E: Event,
   {
-    let type_id = TypeId::of::<T>();
-
-    if let Some(callbacks) = self.registry.get_mut(&type_id) {
-      for callback in callbacks {
-        callback.0(event);
+    let event_ref = &event;
+    if let Some(subscribers) = self.subscribers.get_mut(&TypeId::of::<E>()) {
+      for subscriber in subscribers {
+        subscriber.0(event_ref);
       }
     }
   }
 
-  pub fn get_subscriptions<T>(&self) -> Option<&Vec<EventSubscriptionArgs<'a, F>>>
-  where
-    T: 'a + Any + Send + Sync,
-  {
-    let type_id = TypeId::of::<T>();
-
-    self.registry.get(&type_id)
+  fn get_subscriptions<E: 'static>(&self) -> Option<&Vec<EventSubscriptionArgs>> {
+    self.subscribers.get(&TypeId::of::<E>())
   }
 }
 
@@ -76,15 +59,18 @@ where
 mod event_registry_tests {
   use std::sync::{Arc, Mutex};
 
+  use isle_macros::Event;
+
   use crate::filter;
 
-  use super::*;
+use super::*;
 
+  #[derive(Event)]
   struct MyEvent {}
 
   #[test]
   fn test_event_registry() {
-    let mut registry: EventRegistry<f32> = EventRegistry::new();
+    let mut registry: EventRegistry = EventRegistry::new();
 
     let counter: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
     let c_ref = counter.clone();
@@ -94,18 +80,18 @@ mod event_registry_tests {
       *v += 1;
     });
 
-    registry.invoke(&MyEvent {});
-    registry.invoke(&MyEvent {});
+    registry.invoke(MyEvent {});
+    registry.invoke(MyEvent {});
 
     assert_eq!(2, *counter.lock().unwrap());
   }
 
   #[test]
   fn test_filter_registry() {
-    let mut registry: EventRegistry<Vec<TypeId>> = EventRegistry::new();
+    let mut registry: EventRegistry = EventRegistry::new();
 
-    registry.subscribe_with_filter::<i32>(|_| {}, Some(filter![i32, i64]));
-    let subscriptions = registry.get_subscriptions::<i32>().unwrap();
+    registry.subscribe_with_filter::<MyEvent>(|_| {}, Some(filter![i32, i64]));
+    let subscriptions = registry.get_subscriptions::<MyEvent>().unwrap();
     assert_eq!(subscriptions.len(), 1);
 
     let filter = subscriptions[0].1.as_ref().unwrap();
