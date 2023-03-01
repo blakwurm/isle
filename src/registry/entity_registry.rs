@@ -1,7 +1,7 @@
 use std::{
   any::{Any, TypeId},
   collections::{HashMap, HashSet},
-  hash::Hash,
+  hash::Hash, rc::Rc, cell::RefCell, sync::{Arc, Mutex, mpsc::Sender},
 };
 
 #[macro_export]
@@ -11,9 +11,34 @@ macro_rules! filter {
   }
 }
 
+pub trait StateQueue {
+  fn stage<F>(&self, f: F)
+  where
+    F: FnOnce(&mut Self) + Send + 'static;
+  fn commit(&mut self);
+}
+
+impl<T: Component> StateQueue for T {
+  queue: Arc<Mutex<Sender<Box<dyn FnOnce(&mut Self) + Send>>>>,
+  fn stage<F>(&self, f: F)
+  where
+    F: FnOnce(&mut Self) + Send + 'static,
+  {
+  }
+
+  fn commit(&mut self) {
+  }
+}
+
+trait Component: Any + Send + Sync {
+  fn as_any(&self) -> &dyn Any;
+  fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+
 #[derive(Default)]
 pub struct EntityRegistry {
-  entities: HashMap<(String, TypeId), Box<dyn Any>>,
+  entities: HashMap<(String, TypeId), Box<dyn Component>>,
   components: HashMap<TypeId, HashSet<String>>,
 }
 
@@ -24,7 +49,7 @@ impl EntityRegistry {
     }
   }
 
-  pub fn add_component<T: Hash + Eq + 'static>(&mut self, entity: String, component: T) {
+  pub fn add_component<T: Component>(&mut self, entity: String, component: T) {
     let type_id = TypeId::of::<T>();
     let components = self.components.entry(type_id).or_insert(HashSet::new());
     components.insert(entity.clone());
@@ -32,28 +57,35 @@ impl EntityRegistry {
     self.entities.insert((entity, type_id), Box::new(component));
   }
 
-  pub fn get_component<T: 'static>(&self, entity: &String) -> Option<&T> {
+  pub fn get_component<T: Component>(&self, entity: &String) -> Option<&T> {
     let type_id = TypeId::of::<T>();
 
     let entity = self.entities.get(&(entity.clone(), type_id))?;
-    entity.downcast_ref::<T>()
+    entity.as_ref().downcast_ref::<T>()
   }
 
-  pub fn get_component_mut<T: 'static>(&mut self, entity: &String) -> Option<&mut T> {
+  pub fn get_component_mut<T: Component>(&mut self, entity: &String) -> Option<&mut T> {
     let type_id = TypeId::of::<T>();
 
     let entity = self.entities.get_mut(&(entity.clone(), type_id))?;
     entity.downcast_mut::<T>()
   }
 
-  pub fn get_entities_by_component<T: 'static>(&self) -> Option<Vec<&String>> {
+  pub fn get_components<T: Component>(&self) -> Option<Vec<&T>> {
+    let type_id = TypeId::of::<T>();
+
+    let entities = self.components.get(&type_id)?;
+    Some(entities.iter().map(|entity| self.get_component::<T>(entity).unwrap()).collect())
+  }
+
+  pub fn get_entities_by_component<T: Component>(&self) -> Option<Vec<&String>> {
     let type_id = TypeId::of::<T>();
 
     let entities = self.components.get(&type_id)?;
     Some(entities.iter().collect())
   }
 
-  pub fn get_entities_by_components(&self, components: Vec<TypeId>) -> Option<HashSet<String>> {
+  pub fn get_entities_by_components(&self, components: &Vec<TypeId>) -> Option<HashSet<String>> {
     let mut set: HashSet<String> = self
       .components
       .get(&components[0])?
@@ -69,9 +101,8 @@ impl EntityRegistry {
   }
 }
 
+#[cfg(test)]
 mod entity_registry_tests {
-  use crate::ecs::EntityProxy;
-
   use super::*;
 
   #[test]
@@ -107,16 +138,16 @@ mod entity_registry_tests {
       Some(&2_i64)
     );
 
-    let mut entity = EntityProxy(String::from("test_entity"), &mut registry);
+    let entity = String::from("test_entity");
 
-    assert_eq!(entity.get_component::<i32>(), Some(&1));
-    assert_eq!(entity.get_component::<i64>(), Some(&2_i64));
+    assert_eq!(registry.get_component::<i32>(&entity), Some(&1));
+    assert_eq!(registry.get_component::<i64>(&entity), Some(&2_i64));
 
-    *entity.get_component_mut::<i32>().unwrap() = 3;
-    *entity.get_component_mut::<i64>().unwrap() = 4_i64;
+    *registry.get_component_mut::<i32>(&entity).unwrap() = 3;
+    *registry.get_component_mut::<i64>(&entity).unwrap() = 4_i64;
 
-    assert_eq!(entity.get_component::<i32>(), Some(&3));
-    assert_eq!(entity.get_component::<i64>(), Some(&4_i64));
+    assert_eq!(registry.get_component::<i32>(&entity), Some(&3));
+    assert_eq!(registry.get_component::<i64>(&entity), Some(&4_i64));
   }
 
   #[test]
@@ -148,7 +179,7 @@ mod entity_registry_tests {
     registry.add_component(String::from("test_entity_4"), 6_i64);
 
     let entities = registry
-      .get_entities_by_components(filter![i32, i64])
+      .get_entities_by_components(&filter![i32, i64])
       .unwrap();
     assert!(entities.contains(&String::from("test_entity_1")));
     assert!(entities.contains(&String::from("test_entity_2")));
